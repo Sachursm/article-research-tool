@@ -18,7 +18,7 @@ load_dotenv()
 CHUNK_SIZE = 500
 COLLECTION_NAME = "article_research_collection"
 VECTORSTORE_DIR = Path(__file__).parent / "resources" / "vectorstore"
-EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
+EMBEDDING_MODEL = "BAAI/bge-large-en-v1.5"
 
 #custom prompt for answer generation
 CUSTOM_PROMPT = PromptTemplate(
@@ -77,13 +77,18 @@ def get_llm():
     return ChatGroq(model="llama-3.3-70b-versatile", temperature=0.3)
 
 
-def get_vector_store():
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
-    return Chroma(
-        collection_name=COLLECTION_NAME,
-        persist_directory=str(VECTORSTORE_DIR),
-        embedding_function=embeddings,
+#embeddings created separately
+def get_embeddings():
+    return HuggingFaceEmbeddings(
+        model_name=EMBEDDING_MODEL,
+        model_kwargs={"device": "cpu"},
+        encode_kwargs={"normalize_embeddings": True}
     )
+
+def get_vector_store(embeddings):  # receives embeddings as parameter
+    return Chroma(collection_name = COLLECTION_NAME,
+                  persist_directory = str(VECTORSTORE_DIR),
+                  embedding_function=embeddings)
 
 def generate_summary(docs, llm):
     context = "\n\n".join(
@@ -141,7 +146,8 @@ def process_data(document: list):
     """
     print("Initializing components...")
     llm = get_llm()
-    vector_store = get_vector_store()
+    embeddings = get_embeddings()
+    vector_store = get_vector_store(embeddings)
 
     try:
         vector_store.reset_collection()
