@@ -96,21 +96,24 @@ def generate_summary(docs, llm):
 
 async def scrape_with_playwright(url: str) -> Document:
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True)
-        page = await browser.new_page()
-        
-        # Wait for JS to fully render
-        await page.goto(url, wait_until="networkidle")
-        
-        # Get full rendered content
-        content = await page.inner_text("body")
-        
-        await browser.close()
-        
-        return Document(
-            page_content=content,
-            metadata={"source": url}
+        browser = await p.chromium.launch(
+            headless=True,
+            args=[
+                "--no-sandbox",              # required in Docker
+                "--disable-dev-shm-usage",   # prevents crashes on low memory
+                "--disable-gpu",             # no GPU in HF CPU container
+                "--single-process"           # lighter on 2 vCPU
+            ]
         )
+        page = await browser.new_page()
+        try:
+            await page.goto(url, wait_until="networkidle", timeout=60000)
+        except Exception:
+            await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+
+        content = await page.inner_text("body")
+        await browser.close()
+        return Document(page_content=content, metadata={"source": url})
 
 def scrape_urls(urls:list) -> list:
   result = []
