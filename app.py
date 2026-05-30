@@ -1,4 +1,5 @@
 import streamlit as st
+import uuid
 
 st.set_page_config(page_title="Article Research Tool", layout="wide")
 
@@ -10,6 +11,7 @@ except Exception as e:
 
 # Session State Init
 defaults = {
+    "session_id": str(uuid.uuid4()),
     "urls_processed": False,
     "processing": False,
     "logs": [],
