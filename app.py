@@ -82,6 +82,7 @@ with col1:
             key = f"url{i}"
             if key in st.session_state:
                 del st.session_state[key]
+        st.session_state.session_id = str(uuid.uuid4())  
         st.session_state.url_count = 3  # reset back to 3
         st.session_state.urls_processed = False
         st.session_state.processing = False
@@ -90,9 +91,12 @@ with col1:
         st.session_state.answer = None
         st.session_state.sources = None
         st.session_state.llm = None
+        if st.session_state.vector_store is not None:
+            st.session_state.vector_store.delete_collection()  
         st.session_state.vector_store = None
         st.session_state.docs = None
         st.rerun()
+
 
 with col2:
 
