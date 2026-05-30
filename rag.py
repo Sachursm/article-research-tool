@@ -85,8 +85,8 @@ def get_embeddings():
         encode_kwargs={"normalize_embeddings": True}
     )
 
-def get_vector_store(embeddings):  # receives embeddings as parameter
-    return Chroma(collection_name = COLLECTION_NAME,
+def get_vector_store(embeddings, session_id):  # receives embeddings and session_id as parameters
+    return Chroma(collection_name = f"{COLLECTION_NAME}_{session_id}",
                   persist_directory = str(VECTORSTORE_DIR),
                   embedding_function=embeddings)
 
@@ -139,7 +139,7 @@ def scrape_urls(urls:list) -> list:
       result.append(doc)
   return result
 
-def process_data(document: list):
+def process_data(document: list, session_id: str):
     """
     Scrape web pages, split into chunks, store in Chroma DB.
     Returns the initialized (llm, vector_store) tuple for session storage.
@@ -147,7 +147,7 @@ def process_data(document: list):
     print("Initializing components...")
     llm = get_llm()
     embeddings = get_embeddings()
-    vector_store = get_vector_store(embeddings)
+    vector_store = get_vector_store(embeddings, session_id)
 
     try:
         vector_store.reset_collection()
