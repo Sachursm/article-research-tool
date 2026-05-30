@@ -91,41 +91,44 @@ with col1:
         st.session_state.vector_store = None
         st.session_state.docs = None
         st.rerun()
-        
+
 with col2:
 
     if st.session_state.processing:
-        st.subheader("⚙️ Processing Logs")
-
-        steps = [
-            "🔧 Initializing components...",
-            "📥 Loading data...",
-            "✂️ Splitting text...",
-            "🗄️ Adding docs to vector DB...",
-        ]
-
-        log_box = st.empty()
-
-        with st.spinner("Processing URLs, please wait..."):
-            for step in steps:
-                st.session_state.logs.append(step)
-                log_box.markdown("\n\n".join(st.session_state.logs))
-
-            # ✅ Capture returned components into session state
+        
+        bar = st.progress(0)
+        with st.status("⚙️ Processing....", expanded=True) as status:
             try:
+                step1 = st.empty()
+                step1.write("📥 Loading URLs...")
                 document = scrape_urls(st.session_state.urls_to_process)
+                bar.progress(50)
+                step1.write("✅ Loading URLs... Done!")
+                
+                step2 = st.empty()
+                step2.write("✂️ Chunking & Embedding...")
                 llm, vector_store, docs = process_data(document)
+                bar.progress(75) 
+                step2.write("✅ Chunking & Embedding... Done!")
+
+                step3 = st.empty()
+                step3.write("⏳ Saving to memory...")
                 st.session_state.llm = llm
                 st.session_state.vector_store = vector_store
                 st.session_state.docs = docs
+                bar.progress(100) 
+                step3.write("✅ Saving to memory... Done!") 
+
+                status.update(label="✅ Complete!", state="complete")
 
             except Exception as e:
                 st.error(f"Processing failed: {e}")
                 st.session_state.processing = False
                 st.stop()
-        st.session_state.processing = False
-        st.session_state.urls_processed = True
-        st.rerun()
+
+            st.session_state.processing = False
+            st.session_state.urls_processed = True
+            st.rerun()
 
     elif st.session_state.urls_processed:
         st.success("✅ URLs processed! Ask your question below.")
