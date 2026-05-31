@@ -11,6 +11,7 @@ from uuid import uuid4
 from langchain_core.documents import Document
 from playwright.async_api import async_playwright
 import asyncio
+import pypdf
 
 load_dotenv()
 
@@ -138,6 +139,25 @@ def scrape_urls(urls:list) -> list:
       )
       result.append(doc)
   return result
+
+def extract_pdf(files: list)-> list:
+    result = []
+    for file in files:
+        reader = pypdf.PdfReader(file)
+        text = ""
+        for page in reader.pages:
+            text += page.extract_text()
+        result.append(Document(page_content=text, 
+                              metadata={"source": file.name}))
+    return result
+
+def extract_txt(files: list) -> list:
+    result = []
+    for file in files:
+        text = file.read().decode("utf-8")
+        result.append(Document(page_content=text, 
+                              metadata={"source": file.name}))
+    return result
 
 def process_data(document: list, session_id: str):
     """
