@@ -14,3 +14,5 @@ requests
 huggingface-hub
 playwright
 pypdf
+youtube-transcript-api
+pytube

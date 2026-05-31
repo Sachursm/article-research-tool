@@ -12,6 +12,9 @@ from langchain_core.documents import Document
 from playwright.async_api import async_playwright
 import asyncio
 import pypdf
+import re
+from youtube_transcript_api import YouTubeTranscriptApi
+from pytube import YouTube
 
 load_dotenv()
 
@@ -25,19 +28,26 @@ EMBEDDING_MODEL = "BAAI/bge-large-en-v1.5"
 CUSTOM_PROMPT = PromptTemplate(
     input_variables=["context", "question"],
     template="""
-You are a helpful article research assistant.
-Look carefully through ALL the context provided.
-Use ONLY the information from the article below to answer the question.
-If the question asks for a full form or abbreviation, look carefully for the expanded term in the context.
+You are a helpful research assistant analyzing content from articles and videos.
+Use ONLY the information from the context below to answer.
 If the answer is not present, say you don't know.
 
-Context
+Structure your response exactly like this:
+
+**Answer**
+[Direct one line answer]
+
+**Explanation**
+[Detailed explanation from the context]
+
+**Evidence**
+[Exact quote from the context supporting the answer]
+
+Context:
 =======
 {context}
 
 Question: {question}
-
-Answer:
 """
 )
 
@@ -121,24 +131,56 @@ async def scrape_with_playwright(url: str) -> Document:
         await browser.close()
         return Document(page_content=content, metadata={"source": url})
 
-def scrape_urls(urls:list) -> list:
-  result = []
-  for url in urls:
-    loader = WebBaseLoader(
-        web_paths=[url],
-        header_template={"User-Agent": "Mozilla/5.0"}
-    )
-    data = loader.load()
-    if len(data[0].page_content) < 500:
-      doc = asyncio.run(scrape_with_playwright(url))
-      result.append(doc)
-    else:
-      doc = Document(
-          page_content=data[0].page_content,
-          metadata= data[0].metadata
-      )
-      result.append(doc)
-  return result
+def find_youtube_url(url: str) -> str:
+    if re.search(r"(youtube\.com|youtu\.be)", url):
+        return url
+
+def extract_video_id(url):
+    match = re.search(r"(?:v=|youtu\.be/)([a-zA-Z0-9_-]{11})", url)
+    return match.group(1) if match else None
+
+def get_video_title(url: str) -> str:
+    try:
+        yt = YouTube(url)
+        return yt.title
+    except Exception:
+        return url 
+
+def get_transcript(video_id):
+    try:
+        api = YouTubeTranscriptApi()
+        transcript = api.fetch(video_id)
+        return " ".join([t.text for t in transcript])
+    except Exception as e:
+        raise ValueError(f"Could not get transcript: {e}")
+
+def scrape_urls(urls: list) -> list:
+    result = []
+    for url in urls:
+        if find_youtube_url(url):
+            title = get_video_title(url)
+            video_id = extract_video_id(url)
+            transcript = get_transcript(video_id)
+            result.append(Document(
+                page_content=transcript,
+                metadata={"source": url, "title": title}
+            ))
+        else:
+            loader = WebBaseLoader(
+                web_paths=[url],
+                header_template={"User-Agent": "Mozilla/5.0"}
+            )
+            data = loader.load()
+            if len(data[0].page_content) < 500:
+                doc = asyncio.run(scrape_with_playwright(url))
+                result.append(doc)
+            else:
+                doc = Document(
+                    page_content=data[0].page_content,
+                    metadata=data[0].metadata
+                )
+                result.append(doc)
+    return result
 
 def extract_pdf(files: list)-> list:
     result = []
@@ -175,19 +217,32 @@ def process_data(document: list, session_id: str):
         pass
 
     print("Splitting text...")
-    text_splitter = RecursiveCharacterTextSplitter(
-        separators=["\n\n", "\n", ".", " "],
-        chunk_size=CHUNK_SIZE,
-        chunk_overlap=50,
-    )
-    docs = text_splitter.split_documents(document)
+    all_docs = []
+
+    for doc in document:
+        # YouTube transcript → smaller chunks for precise retrieval
+        if doc.metadata.get("title"):
+            splitter = RecursiveCharacterTextSplitter(
+                separators=["\n\n", "\n", ". ", " "],
+                chunk_size=300,     # ← smaller for videos
+                chunk_overlap=50,
+            )
+        else:
+            # Articles, PDFs, TXT → normal chunks
+            splitter = RecursiveCharacterTextSplitter(
+                separators=["\n\n", "\n", ". ", " "],
+                chunk_size=CHUNK_SIZE,
+                chunk_overlap=100,
+            )
+        chunks = splitter.split_documents([doc])
+        all_docs.extend(chunks)
 
     print("Adding docs to vector DB...")
-    uuids = [str(uuid4()) for _ in docs]
-    vector_store.add_documents(docs, ids=uuids)
+    uuids = [str(uuid4()) for _ in all_docs]
+    vector_store.add_documents(all_docs, ids=uuids)
 
-    print(f"Stored {len(docs)} chunks")
-    return llm, vector_store, docs
+    print(f"Stored {len(all_docs)} chunks")
+    return llm, vector_store, all_docs
 
 
 def generate_answer(query, llm, vector_store, docs):
