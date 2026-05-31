@@ -12,13 +12,11 @@ except Exception as e:
 # Session State Init
 defaults = {
     "session_id": str(uuid.uuid4()),
+    "url_count": 0,
     "urls_processed": False,
     "processing": False,
     "logs": [],
     "urls_to_process": [],
-    "url1": "",
-    "url2": "",
-    "url3": "",
     "uploaded_pdfs": [],
     "uploaded_txts": [],
     "answer": None,
@@ -237,11 +235,6 @@ with col2:
         st.divider()
 
         # ── Process Button ────────────────────────────
-        urls = list(set(
-            st.session_state[f"url{i}"]
-            for i in range(1, st.session_state.url_count + 1)
-            if st.session_state.get(f"url{i}", "").strip()
-        ))
 
         if st.button("▶ Process Data"):
             if not st.session_state.urls_to_process and not st.session_state.uploaded_txts and not st.session_state.uploaded_pdfs:
